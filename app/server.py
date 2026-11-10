@@ -21,6 +21,8 @@ import time
 
 from aiohttp import web
 
+import atualizador
+
 
 def env_int(nome, padrao):
     try:
@@ -89,6 +91,37 @@ sessoes = {}   # token -> {"criada", "vista", "midia", "mjpeg"}
 midias = {}    # token de mídia -> token de sessão
 falhas = []    # horários das tentativas de senha erradas
 
+# as sessões ficam guardadas dentro do contêiner para sobreviver a um reinício
+# do servidor (por exemplo, depois do botão "Atualizar sistema")
+ARQ_SESSOES = os.environ.get("ARQ_SESSOES", "/tmp/terminal-sessoes.json")
+
+
+def salvar_sessoes():
+    dados = {t: {k: s[k] for k in ("criada", "vista", "midia")} for t, s in sessoes.items()}
+    try:
+        fd = os.open(ARQ_SESSOES + ".novo", os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as f:
+            json.dump(dados, f)
+        os.replace(ARQ_SESSOES + ".novo", ARQ_SESSOES)
+    except OSError:
+        pass
+
+
+def carregar_sessoes():
+    try:
+        with open(ARQ_SESSOES) as f:
+            dados = json.load(f)
+    except (OSError, ValueError):
+        return
+    t = time.time()
+    for tok, d in dados.items():
+        try:
+            if t - d["vista"] <= OCIOSO and t - d["criada"] <= MAXIMO:
+                sessoes[tok] = {"criada": d["criada"], "vista": d["vista"], "midia": d["midia"], "mjpeg": None}
+                midias[d["midia"]] = tok
+        except (KeyError, TypeError):
+            continue
+
 
 def nova_sessao():
     tok = secrets.token_urlsafe(32)
@@ -96,6 +129,7 @@ def nova_sessao():
     t = agora()
     sessoes[tok] = {"criada": t, "vista": t, "midia": mt, "mjpeg": None}
     midias[mt] = tok
+    salvar_sessoes()
     return tok
 
 
@@ -104,6 +138,7 @@ def encerrar(tok):
     if s:
         midias.pop(s["midia"], None)
         matar(s.get("mjpeg"))
+        salvar_sessoes()
 
 
 def valida(tok):
@@ -438,6 +473,8 @@ async def api_estado(req):
         "largura": LARGURA, "altura": ALTURA, "midia": s["midia"],
         "cinema": cinema.rodando(),
         "ociosoMin": OCIOSO // 60,
+        "versao": atualizador.versao_atual()[:7],
+        "aviso": atualizador.aviso_de_falha(),
     }, headers=NOCACHE)
 
 
@@ -538,6 +575,53 @@ async def api_volume(req):
     return web.json_response({"ok": True}, headers=NOCACHE)
 
 
+# ---------------------------------------------------------------- atualização
+
+trava_atualizar = asyncio.Lock()
+
+
+def reiniciar_servidor():
+    """Encerra o servidor; o supervisor liga de novo já com a versão nova."""
+    log("reiniciando para aplicar a atualização")
+    salvar_sessoes()
+    matar(cinema.proc)
+    for s in sessoes.values():
+        matar(s.get("mjpeg"))
+    os._exit(0)
+
+
+async def api_atualizacao_get(req):
+    _, s = sessao_req(req)
+    if not s:
+        return nao_autorizado()
+    try:
+        info = await atualizador.verificar()
+    except atualizador.ErroAtualizacao as e:
+        return web.json_response({"erro": str(e)}, headers=NOCACHE)
+    return web.json_response(info, headers=NOCACHE)
+
+
+async def api_atualizacao_post(req):
+    _, s = sessao_req(req)
+    if not s:
+        return nao_autorizado()
+    if not origem_ok(req):
+        return web.json_response({"erro": "origem"}, status=403)
+    if trava_atualizar.locked():
+        return web.json_response({"erro": "Já existe uma atualização em andamento."}, headers=NOCACHE)
+    async with trava_atualizar:
+        try:
+            r = await atualizador.aplicar()
+        except atualizador.ErroAtualizacao as e:
+            return web.json_response({"erro": str(e)}, headers=NOCACHE)
+        except OSError as e:
+            log("falha ao gravar a atualização:", e)
+            return web.json_response({"erro": "Não consegui gravar os arquivos novos na pasta do PC."}, headers=NOCACHE)
+    log("atualizado para", r["versao"])
+    asyncio.get_event_loop().call_later(1.5, reiniciar_servidor)
+    return web.json_response(r, headers=NOCACHE)
+
+
 # ---------------------------------------------------------------- app
 
 @web.middleware
@@ -551,6 +635,8 @@ async def cabecalhos(req, handler):
 
 async def ao_iniciar(app):
     app["vigia"] = asyncio.ensure_future(cinema.vigiar())
+    # depois de 30 s no ar, a versão atual é considerada boa
+    asyncio.get_event_loop().call_later(30, atualizador.confirmar_inicio)
 
 
 async def ao_encerrar(app):
@@ -576,6 +662,8 @@ def criar_app():
     app.router.add_post("/api/input", api_input)
     app.router.add_post("/api/cinema", api_cinema)
     app.router.add_post("/api/volume", api_volume)
+    app.router.add_get("/api/atualizacao", api_atualizacao_get)
+    app.router.add_post("/api/atualizacao", api_atualizacao_post)
     app.on_startup.append(ao_iniciar)
     app.on_cleanup.append(ao_encerrar)
     return app
@@ -586,6 +674,7 @@ def main():
         log("ERRO: defina a variável SENHA com pelo menos 8 caracteres (arquivo .env).")
         sys.exit(1)
     log(f"tela {LARGURA}x{ALTURA} em {DISPLAY}, porta {PORTA}")
+    carregar_sessoes()
     web.run_app(criar_app(), host="0.0.0.0", port=PORTA, access_log=None, print=None)
 
 

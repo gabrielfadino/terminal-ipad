@@ -12,8 +12,8 @@ services:
     mem_limit: 2g
     volumes:
       - terminal-home:/home/terminal
-      # o app vem direto desta pasta: atualizar a tela do iPad não exige remontar
-      - ./app:/opt/terminal:ro
+      # a pasta do projeto fica visível no contêiner: o botão Atualizar grava aqui
+      - .:/opt/projeto
 
 volumes:
   terminal-home:

@@ -81,11 +81,15 @@ if (-not (Test-Path $env_)) {
   $bytes = New-Object byte[] 16
   $rng.GetBytes($bytes)
   $senha = -join ($bytes | ForEach-Object { $chars[$_ % $chars.Length] })
-  $conteudo = "SENHA=$senha`r`nSESSAO_OCIOSA_MIN=30`r`nSESSAO_MAX_HORAS=8`r`n"
+  $conteudo = "SENHA=$senha`r`nSESSAO_OCIOSA_MIN=30`r`nSESSAO_MAX_HORAS=8`r`nATUALIZAR_REPO=gabrielfadino/terminal-ipad`r`nGITHUB_TOKEN=`r`n"
   [System.IO.File]::WriteAllText($env_, $conteudo, (New-Object System.Text.UTF8Encoding $false))
   Ok 'Senha criada e guardada no arquivo .env desta pasta'
 } else {
   Ok 'Usando a senha que já está no arquivo .env'
+  if (-not (Select-String -Path $env_ -Pattern '^ATUALIZAR_REPO=' -Quiet)) {
+    Add-Content -Path $env_ -Value "ATUALIZAR_REPO=gabrielfadino/terminal-ipad`r`nGITHUB_TOKEN="
+    Ok 'Botão "Atualizar sistema" configurado no .env'
+  }
 }
 $linha = Select-String -Path $env_ -Pattern '^SENHA=' | Select-Object -First 1
 $senhaAtual = $linha.Line.Substring(6)

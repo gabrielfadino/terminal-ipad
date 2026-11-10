@@ -3,3 +3,7 @@ ACESSO.txt
 instalar-log.txt
 __pycache__/
 *.pyc
+VERSAO
+.app-anterior/
+.app-com-defeito-*/
+.atualizacao-desfeita

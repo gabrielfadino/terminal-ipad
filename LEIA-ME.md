@@ -110,7 +110,22 @@ O botão **☰** no canto abre o menu:
 Para assistir uma série: abra o site no Firefox pelo Modo Trabalho, dê play,
 coloque o vídeo em tela cheia e então entre no Modo Cinema.
 
-## 8. Manutenção
+## 8. Atualizar pelo próprio sistema
+
+No menu **☰ › Atualizar sistema**, o Terminal confere no GitHub se existe uma versão nova
+(repositório definido em `ATUALIZAR_REPO` no `.env`). Se existir, mostra o que mudou e,
+com um toque em **Atualizar agora**, baixa, instala e reinicia sozinho em poucos segundos,
+sem perder a sessão.
+
+- Se a versão nova não conseguir ligar, o sistema volta sozinho para a anterior e avisa na tela.
+- Arquivos do PC como `.env` e `ACESSO.txt` nunca são alterados.
+- Quando a mudança mexe na estrutura do computador virtual (`Dockerfile` ou `rootfs/`),
+  o aviso pede para rodar o `instalar.bat` no PC para completar.
+- **Repositório privado:** crie um token só de leitura no GitHub
+  (Settings › Developer settings › Fine-grained tokens, permissão *Contents: Read-only*
+  apenas neste repositório) e cole em `GITHUB_TOKEN=` no `.env`. Depois rode o `instalar.bat`.
+
+## 9. Manutenção
 
 ```powershell
 cd C:\terminal-ipad
@@ -122,7 +137,7 @@ docker compose up -d --build # aplica uma atualização
 
 Os favoritos, senhas e logins do Firefox ficam guardados num volume e sobrevivem às atualizações.
 
-## 9. Segurança
+## 10. Segurança
 
 - Pela internet, a única porta aberta é a do Funnel. A porta 8090 do PC só aceita conexões do próprio PC.
 - Depois de 8 senhas erradas, o login fica bloqueado por 15 minutos.
@@ -131,7 +146,7 @@ Os favoritos, senhas e logins do Firefox ficam guardados num volume e sobrevivem
 - Quem entra no Terminal acessa só o computador virtual, nunca os arquivos do Windows.
 - Não salve no Firefox do Terminal senhas dos sistemas da empresa.
 
-## 10. Problemas comuns
+## 11. Problemas comuns
 
 - **Tela preta no iPad:** toque em ☰ › Recarregar tela. Se continuar, rode `docker compose logs -f` no PC.
 - **Erro de certificado no iPad:** confira o passo 6.

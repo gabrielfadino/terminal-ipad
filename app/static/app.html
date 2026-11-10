@@ -16,7 +16,13 @@ html,body{margin:0;height:100%;background:#000;color:#e8eaed;font:15px -apple-sy
 #toque{position:absolute;left:0;top:0;right:0;bottom:0}
 #anel{position:absolute;width:56px;height:56px;margin:-28px 0 0 -28px;border:3px solid #8ab4f8;border-radius:28px;display:none;pointer-events:none}
 #kb{position:absolute;left:0;top:0;width:1px;height:1px;opacity:0;font-size:16px;border:0;padding:0;background:transparent;color:transparent}
-#aviso{position:absolute;left:50%;top:40%;width:340px;margin-left:-170px;text-align:center;background:rgba(20,22,26,.92);border-radius:12px;padding:16px 14px;font-size:15px;display:none}
+#aviso{position:absolute;left:50%;top:40%;width:340px;margin-left:-170px;text-align:center;background:rgba(20,22,26,.92);border-radius:12px;padding:16px 14px;font-size:15px;display:none;z-index:7}
+#atu{position:absolute;left:50%;top:22%;width:380px;margin-left:-190px;background:rgba(18,20,24,.98);border:1px solid #30353c;border-radius:14px;padding:18px 16px;z-index:8;text-align:left}
+#atu h2{font-size:18px;margin:0 0 10px}
+#atu p{font-size:14px;line-height:1.5;color:#c4c7cc;margin:0 0 12px}
+#atu .acoes{text-align:right}
+#atu .acoes .botao{margin-left:8px}
+#atu .botao.ok{background:#1d4ed8;border-color:#2f6fed;color:#fff}
 .botao{-webkit-appearance:none;background:#23272d;color:#e8eaed;border:1px solid #343a42;border-radius:10px;padding:12px 14px;font-size:15px;font-family:inherit;cursor:pointer}
 .botao.ativo{background:#1d4ed8;border-color:#2f6fed;color:#fff}
 #alca{position:absolute;right:10px;bottom:10px;width:44px;height:44px;padding:0;border-radius:22px;background:rgba(20,22,26,.55);border:1px solid rgba(255,255,255,.18);font-size:20px;line-height:42px;text-align:center;z-index:5}
@@ -43,6 +49,15 @@ html,body{margin:0;height:100%;background:#000;color:#e8eaed;font:15px -apple-sy
 <input id="kb" type="text" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false">
 <div id="aviso"></div>
 
+<div id="atu" class="oculto">
+  <h2 id="atuTitulo">Atualizar sistema</h2>
+  <p id="atuTexto"></p>
+  <div class="acoes">
+    <button class="botao" id="atuFechar">Fechar</button>
+    <button class="botao ok" id="atuAplicar">Atualizar agora</button>
+  </div>
+</div>
+
 <button class="botao" id="alca">&#9776;</button>
 
 <div id="menu" class="oculto">
@@ -51,6 +66,7 @@ html,body{margin:0;height:100%;background:#000;color:#e8eaed;font:15px -apple-sy
   <button class="botao" id="bSom">Som: desligado</button>
   <button class="botao" id="bQual">Qualidade: média</button>
   <button class="botao" id="bRecarregar">Recarregar tela</button>
+  <button class="botao" id="bAtualizar">&#8635;&nbsp; Atualizar sistema</button>
   <button class="botao" id="bSair">Sair</button>
   <p class="ajuda">
     Toque = clique &middot; Arrastar = rolar<br>
@@ -702,6 +718,98 @@ html,body{margin:0;height:100%;background:#000;color:#e8eaed;font:15px -apple-sy
     if (modo === 'trabalho') { iniciarQuadro(); }
   }, false);
   $('bRecarregar').addEventListener('click', function () { fecharMenu(); iniciarQuadro(); }, false);
+
+  /* ---------------------------------------------------------- atualizar sistema */
+
+  var versaoAtual = '';
+
+  function escapar(t) {
+    return String(t || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function painelAtu(titulo, html, podeAplicar) {
+    $('atuTitulo').textContent = titulo;
+    $('atuTexto').innerHTML = html;
+    $('atuAplicar').style.display = podeAplicar ? '' : 'none';
+    $('atuFechar').style.display = '';
+    $('atu').className = '';
+  }
+
+  function fecharAtu() { $('atu').className = 'oculto'; }
+
+  function dataCurta(iso) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || '');
+    return m ? (m[3] + '/' + m[2] + '/' + m[1]) : '';
+  }
+
+  $('bAtualizar').addEventListener('click', function () {
+    fecharMenu();
+    painelAtu('Atualizar sistema', 'Procurando uma versão nova…', false);
+    $('atuFechar').style.display = 'none';
+    requisitar('GET', '/api/atualizacao', null, function (st, txt) {
+      var r = {};
+      try { r = JSON.parse(txt); } catch (e) { r = { erro: 'Resposta inválida do servidor.' }; }
+      if (st !== 200 || r.erro) {
+        painelAtu('Não deu para verificar', escapar(r.erro || 'Erro ' + st), false);
+        return;
+      }
+      if (!r.disponivel) {
+        painelAtu('Tudo em dia', 'Você já está na versão mais recente (' + escapar(r.atual) + ').', false);
+        return;
+      }
+      painelAtu('Versão nova disponível',
+        '<b>' + escapar(r.mensagem) + '</b><br>' +
+        'Publicada em ' + escapar(dataCurta(r.data)) + ' · versão ' + escapar(r.nova) +
+        (r.atual ? ' (atual: ' + escapar(r.atual) + ')' : '') +
+        '<br><br>A tela fica fora do ar por alguns segundos enquanto o sistema reinicia.', true);
+    });
+  }, false);
+
+  $('atuFechar').addEventListener('click', fecharAtu, false);
+
+  $('atuAplicar').addEventListener('click', function () {
+    painelAtu('Atualizando…', 'Baixando e instalando a versão nova. Não feche esta tela.', false);
+    $('atuFechar').style.display = 'none';
+    pararSom();
+    requisitar('POST', '/api/atualizacao', { acao: 'aplicar' }, function (st, txt) {
+      var r = {};
+      try { r = JSON.parse(txt); } catch (e) { r = { erro: 'Resposta inválida do servidor.' }; }
+      if (st !== 200 || r.erro) {
+        painelAtu('A atualização não foi feita', escapar(r.erro || 'Erro ' + st) + '<br>Nada foi alterado.', false);
+        return;
+      }
+      var extra = r.reconstruir
+        ? '<br><br><b>Atenção:</b> parte desta versão só vale depois de rodar o <b>instalar.bat</b> no PC.'
+        : '';
+      painelAtu('Reiniciando…', 'Versão ' + escapar(r.versao) + ' instalada. A tela volta em alguns segundos.' + extra, false);
+      esperarVoltar(r.reconstruir ? 6000 : 0);
+    });
+  }, false);
+
+  function esperarVoltar(pausaExtra) {
+    var inicio = Date.now(), caiu = false;
+    function tentar() {
+      var x = new XMLHttpRequest();
+      x.open('GET', '/saude?_=' + Date.now(), true);
+      x.timeout = 3000;
+      x.onreadystatechange = function () {
+        if (x.readyState !== 4) { return; }
+        var ok = x.status === 200;
+        if (!ok) { caiu = true; }
+        if (ok && (caiu || Date.now() - inicio > 6000)) {
+          setTimeout(function () { window.location.reload(); }, pausaExtra);
+          return;
+        }
+        if (Date.now() - inicio > 90000) {
+          painelAtu('Demorando mais que o normal', 'O servidor ainda não voltou. Toque em Fechar e tente recarregar a página em um minuto.', false);
+          return;
+        }
+        setTimeout(tentar, 1500);
+      };
+      x.send(null);
+    }
+    setTimeout(tentar, 2000);
+  }
   $('bSair').addEventListener('click', function () {
     pararQuadro();
     pararSom();
@@ -722,6 +830,9 @@ html,body{margin:0;height:100%;background:#000;color:#e8eaed;font:15px -apple-sy
     W = e.largura;
     H = e.altura;
     MT = e.midia;
+    versaoAtual = e.versao || '';
+    if (e.aviso) { setTimeout(function () { painelAtu('Atualização desfeita', escapar(e.aviso), false); }, 1500); }
+    if (versaoAtual) { $('bAtualizar').innerHTML = '&#8635;&nbsp; Atualizar sistema <small style="color:#9aa0a6">(' + escapar(versaoAtual) + ')</small>'; }
     ajustar();
     iniciarQuadro();
   });
