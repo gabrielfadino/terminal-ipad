@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Terminal</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Terminal">
+<link rel="apple-touch-icon" href="/icone.png">
+<style>
+html,body{margin:0;height:100%;background:#000;color:#e8eaed;font:15px -apple-system,"Helvetica Neue",Helvetica,Arial,sans-serif;overflow:hidden;-webkit-user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:rgba(0,0,0,0);-webkit-text-size-adjust:100%}
+#tela{position:absolute;background:#000;overflow:hidden}
+#quadro,#video{position:absolute;left:0;top:0;width:100%;height:100%;display:block}
+#video{display:none;background:#000}
+#toque{position:absolute;left:0;top:0;right:0;bottom:0}
+#anel{position:absolute;width:56px;height:56px;margin:-28px 0 0 -28px;border:3px solid #8ab4f8;border-radius:28px;display:none;pointer-events:none}
+#kb{position:absolute;left:0;top:0;width:1px;height:1px;opacity:0;font-size:16px;border:0;padding:0;background:transparent;color:transparent}
+#aviso{position:absolute;left:50%;top:40%;width:340px;margin-left:-170px;text-align:center;background:rgba(20,22,26,.92);border-radius:12px;padding:16px 14px;font-size:15px;display:none}
+.botao{-webkit-appearance:none;background:#23272d;color:#e8eaed;border:1px solid #343a42;border-radius:10px;padding:12px 14px;font-size:15px;font-family:inherit;cursor:pointer}
+.botao.ativo{background:#1d4ed8;border-color:#2f6fed;color:#fff}
+#alca{position:absolute;right:10px;bottom:10px;width:44px;height:44px;padding:0;border-radius:22px;background:rgba(20,22,26,.55);border:1px solid rgba(255,255,255,.18);font-size:20px;line-height:42px;text-align:center;z-index:5}
+#menu{position:absolute;right:10px;bottom:62px;width:260px;background:rgba(18,20,24,.96);border:1px solid #30353c;border-radius:14px;padding:10px;z-index:6}
+#menu .botao{display:block;width:100%;margin-bottom:8px;text-align:left}
+#menu .ajuda{color:#9aa0a6;font-size:12px;line-height:1.5;margin:4px 2px 0}
+#teclas{position:absolute;left:0;right:0;top:0;padding:6px 64px 6px 6px;background:rgba(18,20,24,.96);border-bottom:1px solid #30353c;z-index:4;white-space:nowrap;overflow:hidden}
+#teclas .botao{padding:9px 11px;margin-right:4px;font-size:14px}
+#controle{position:absolute;left:0;right:0;bottom:0;padding:12px 10px 16px;background:rgba(10,11,13,.88);text-align:center;z-index:4}
+#controle .botao{margin:0 3px 6px;min-width:72px}
+#controle .nota{color:#9aa0a6;font-size:12px}
+.oculto{display:none}
+</style>
+</head>
+<body>
+
+<div id="tela">
+  <img id="quadro" alt="">
+  <video id="video" webkit-playsinline playsinline preload="none"></video>
+  <div id="toque"></div>
+  <div id="anel"></div>
+</div>
+
+<input id="kb" type="text" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false">
+<div id="aviso"></div>
+
+<button class="botao" id="alca">&#9776;</button>
+
+<div id="menu" class="oculto">
+  <button class="botao" id="bTeclado">&#9000;&nbsp; Teclado</button>
+  <button class="botao" id="bCinema">&#9654;&nbsp; Modo Cinema</button>
+  <button class="botao" id="bSom">Som: desligado</button>
+  <button class="botao" id="bQual">Qualidade: média</button>
+  <button class="botao" id="bRecarregar">Recarregar tela</button>
+  <button class="botao" id="bSair">Sair</button>
+  <p class="ajuda">
+    Toque = clique &middot; Arrastar = rolar<br>
+    Segurar = botão direito<br>
+    Segurar e arrastar = selecionar ou mover<br>
+    Dois dedos tocando = botão direito
+  </p>
+</div>
+
+<div id="teclas" class="oculto">
+  <button class="botao" data-k="Escape">Esc</button>
+  <button class="botao" data-k="Tab">Tab</button>
+  <button class="botao" data-mod="ctrl" id="mCtrl">Ctrl</button>
+  <button class="botao" data-mod="alt" id="mAlt">Alt</button>
+  <button class="botao" data-k="Left">&#8592;</button>
+  <button class="botao" data-k="Up">&#8593;</button>
+  <button class="botao" data-k="Down">&#8595;</button>
+  <button class="botao" data-k="Right">&#8594;</button>
+  <button class="botao" data-k="BackSpace">&#9003;</button>
+  <button class="botao" data-k="Return">Enter</button>
+  <button class="botao" data-acao="fechar">Fechar</button>
+</div>
+
+<div id="controle" class="oculto">
+  <div>
+    <button class="botao" data-k="space">&#9199; Play/Pausa</button>
+    <button class="botao" data-k="Left">&#8722;10 s</button>
+    <button class="botao" data-k="Right">+10 s</button>
+    <button class="botao" data-vol="menos">Vol &#8722;</button>
+    <button class="botao" data-vol="mais">Vol +</button>
+    <button class="botao" data-k="f">Tela cheia</button>
+  </div>
+  <div>
+    <button class="botao" id="cReconectar">Reconectar vídeo</button>
+    <button class="botao" id="cSair">Voltar ao Modo Trabalho</button>
+  </div>
+  <div class="nota">Os comandos aparecem no vídeo com alguns segundos de atraso.</div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var W = 1024, H = 768, MT = '';
+  var BLANK = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+  var QUAL = {
+    baixa: { fps: 6, q: 14, nome: 'baixa' },
+    media: { fps: 10, q: 9, nome: 'média' },
+    alta: { fps: 15, q: 5, nome: 'alta' }
+  };
+  var ORDEM = ['baixa', 'media', 'alta'];
+  var PASSO_ROLAR = 28;
+
+  function $(id) { return document.getElementById(id); }
+  function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+
+  var tela = $('tela'), quadro = $('quadro'), video = $('video'), toque = $('toque');
+  var anel = $('anel'), kb = $('kb'), aviso = $('aviso');
+
+  var pref = { qual: 'media', som: false };
+  try {
+    var salvo = JSON.parse(window.localStorage.getItem('terminal_pref') || '{}');
+    if (QUAL[salvo.qual]) { pref.qual = salvo.qual; }
+  } catch (e) {}
+  function salvarPref() {
+    try { window.localStorage.setItem('terminal_pref', JSON.stringify({ qual: pref.qual })); } catch (e) {}
+  }
+
+  var modo = 'trabalho';
+  var box = { x: 0, y: 0, s: 1 };
+
+  /* ---------------------------------------------------------- utilidades */
+
+  function irLogin() { window.location.href = '/login'; }
+
+  function requisitar(metodo, url, corpo, cb) {
+    var x = new XMLHttpRequest();
+    x.open(metodo, url, true);
+    if (corpo !== null) { x.setRequestHeader('Content-Type', 'application/json'); }
+    x.onreadystatechange = function () {
+      if (x.readyState !== 4) { return; }
+      if (x.status === 401) { irLogin(); return; }
+      if (cb) { cb(x.status, x.responseText); }
+    };
+    x.send(corpo === null ? null : JSON.stringify(corpo));
+  }
+
+  var timerAviso = null;
+  function mostrarAviso(texto, ms) {
+    aviso.textContent = texto;
+    aviso.style.display = 'block';
+    clearTimeout(timerAviso);
+    if (ms) { timerAviso = setTimeout(esconderAviso, ms); }
+  }
+  function esconderAviso() { aviso.style.display = 'none'; }
+
+  function ajustar() {
+    var vw = window.innerWidth, vh = window.innerHeight;
+    var s = Math.min(vw / W, vh / H);
+    var w = Math.round(W * s), h = Math.round(H * s);
+    box = { x: Math.round((vw - w) / 2), y: Math.round((vh - h) / 2), s: s };
+    tela.style.left = box.x + 'px';
+    tela.style.top = box.y + 'px';
+    tela.style.width = w + 'px';
+    tela.style.height = h + 'px';
+  }
+
+  function paraTela(cx, cy) {
+    return {
+      x: clamp(Math.round((cx - box.x) / box.s), 0, W - 1),
+      y: clamp(Math.round((cy - box.y) / box.s), 0, H - 1)
+    };
+  }
+
+  /* ---------------------------------------------------------- envio de comandos */
+
+  var fila = [], enviando = false, timerEnvio = null;
+
+  function enviar(ev) {
+    var u = fila.length ? fila[fila.length - 1] : null;
+    if (ev.t === 'mover' && u && u.t === 'mover') {
+      fila[fila.length - 1] = ev;
+    } else if (ev.t === 'rolar' && u && u.t === 'rolar' && u.x === ev.x && u.y === ev.y) {
+      u.n += ev.n;
+    } else {
+      fila.push(ev);
+    }
+    agendar();
+  }
+
+  function agendar() {
+    if (!enviando && !timerEnvio) { timerEnvio = setTimeout(descarregar, 25); }
+  }
+
+  function descarregar() {
+    timerEnvio = null;
+    if (enviando || !fila.length) { return; }
+    var lote = fila;
+    fila = [];
+    enviando = true;
+    requisitar('POST', '/api/input', lote, function () {
+      enviando = false;
+      if (fila.length) { agendar(); }
+    });
+  }
+
+  /* ---------------------------------------------------------- tela (Modo Trabalho) */
+
+  var inicioQuadro = 0, timerReconectar = null;
+
+  function iniciarQuadro() {
+    clearTimeout(timerReconectar);
+    var q = QUAL[pref.qual];
+    quadro.src = '/stream.mjpg?fps=' + q.fps + '&q=' + q.q + '&_=' + Date.now();
+    inicioQuadro = Date.now();
+    /* nem todo navegador avisa quando o primeiro quadro chega */
+    setTimeout(function () {
+      if (modo === 'trabalho' && aviso.textContent === 'Conectando…') { esconderAviso(); }
+    }, 3000);
+  }
+
+  function pararQuadro() {
+    clearTimeout(timerReconectar);
+    quadro.src = BLANK;
+  }
+
+  quadro.onload = function () {
+    if (modo === 'trabalho' && quadro.src !== BLANK) { esconderAviso(); }
+  };
+  quadro.onerror = function () {
+    if (modo !== 'trabalho' || document.hidden) { return; }
+    mostrarAviso('Reconectando à tela…');
+    clearTimeout(timerReconectar);
+    timerReconectar = setTimeout(function () {
+      requisitar('GET', '/api/estado', null, function (st) {
+        if (st === 200) { iniciarQuadro(); } else { timerReconectar = setTimeout(iniciarQuadro, 3000); }
+      });
+    }, 2000);
+  };
+
+  /* reabre a conexão de tempos em tempos para o Safari antigo não acumular memória */
+  setInterval(function () {
+    if (modo === 'trabalho' && !document.hidden && Date.now() - inicioQuadro > 10 * 60 * 1000) {
+      iniciarQuadro();
+    }
+  }, 30000);
+
+  /* confere a sessão a cada minuto */
+  setInterval(function () { requisitar('GET', '/api/estado', null, null); }, 60000);
+
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) {
+      if (modo === 'trabalho') { pararQuadro(); }
+    } else if (modo === 'trabalho') {
+      iniciarQuadro();
+    }
+  }, false);
+
+  /* ---------------------------------------------------------- som (Modo Trabalho) */
+
+  var audio = null;
+
+  function ligarSom() {
+    if (!audio) {
+      audio = new Audio();
+      audio.addEventListener('error', function () {
+        if (pref.som && modo === 'trabalho') { setTimeout(function () { if (pref.som) { tocarSom(); } }, 3000); }
+      }, false);
+    }
+    pref.som = true;
+    tocarSom();
+    atualizarMenu();
+  }
+
+  function tocarSom() {
+    audio.src = '/m/' + MT + '/audio.mp3?_=' + Date.now();
+    var p = audio.play();
+    if (p && p['catch']) { p['catch'](function () {}); }
+  }
+
+  function pararSom() {
+    if (audio) {
+      audio.pause();
+      audio.removeAttribute('src');
+      try { audio.load(); } catch (e) {}
+    }
+  }
+
+  function desligarSom() {
+    pref.som = false;
+    pararSom();
+    atualizarMenu();
+  }
+
+  /* ---------------------------------------------------------- toque */
+
+  var g = null, timerLongo = null;
+
+  function mostrarAnel(cx, cy) {
+    anel.style.left = (cx - box.x) + 'px';
+    anel.style.top = (cy - box.y) + 'px';
+    anel.style.display = 'block';
+  }
+  function esconderAnel() { anel.style.display = 'none'; }
+  function cancelarLongo() { clearTimeout(timerLongo); timerLongo = null; }
+
+  function rolarAte(y) {
+    var d = g.ultimoY - y;
+    g.ultimoY = y;
+    g.acum += d;
+    var n = 0;
+    while (g.acum >= PASSO_ROLAR) { n++; g.acum -= PASSO_ROLAR; }
+    while (g.acum <= -PASSO_ROLAR) { n--; g.acum += PASSO_ROLAR; }
+    if (n) { enviar({ t: 'rolar', x: g.p.x, y: g.p.y, n: n }); }
+  }
+
+  function meio(toques) {
+    return {
+      x: (toques[0].clientX + toques[1].clientX) / 2,
+      y: (toques[0].clientY + toques[1].clientY) / 2
+    };
+  }
+
+  toque.addEventListener('touchstart', function (e) {
+    e.preventDefault();
+    fecharMenu();
+    if (modo === 'cinema') { alternarControle(); return; }
+    var toques = e.touches;
+    if (toques.length === 2) {
+      cancelarLongo();
+      esconderAnel();
+      if (g && g.arrasto) { enviar({ t: 'cima', x: g.ult.x, y: g.ult.y }); }
+      var m = meio(toques);
+      g = { dois: true, p: paraTela(m.x, m.y), ultimoY: m.y, acum: 0, t: Date.now(), moveu: false };
+      return;
+    }
+    if (toques.length !== 1) { return; }
+    var t0 = toques[0];
+    var p = paraTela(t0.clientX, t0.clientY);
+    g = { dois: false, cx: t0.clientX, cy: t0.clientY, p: p, ult: p, ultimoY: t0.clientY, acum: 0,
+          t: Date.now(), moveu: false, longo: false, arrasto: false };
+    var este = g;
+    cancelarLongo();
+    timerLongo = setTimeout(function () {
+      if (g === este && !este.moveu) {
+        este.longo = true;
+        mostrarAnel(este.cx, este.cy);
+        enviar({ t: 'mover', x: este.p.x, y: este.p.y });
+      }
+    }, 550);
+  }, false);
+
+  toque.addEventListener('touchmove', function (e) {
+    e.preventDefault();
+    if (!g || modo !== 'trabalho') { return; }
+    var toques = e.touches;
+    if (g.dois) {
+      if (toques.length < 2) { return; }
+      var m = meio(toques);
+      if (Math.abs(m.y - g.ultimoY) > 2) { g.moveu = true; }
+      rolarAte(m.y);
+      return;
+    }
+    var t0 = toques[0];
+    var dx = t0.clientX - g.cx, dy = t0.clientY - g.cy;
+    if (!g.moveu && Math.abs(dx) + Math.abs(dy) > 10) {
+      g.moveu = true;
+      if (g.longo) {
+        g.arrasto = true;
+        enviar({ t: 'baixo', x: g.p.x, y: g.p.y });
+      } else {
+        cancelarLongo();
+      }
+    }
+    if (!g.moveu) { return; }
+    if (g.arrasto) {
+      var p = paraTela(t0.clientX, t0.clientY);
+      g.ult = p;
+      enviar({ t: 'mover', x: p.x, y: p.y });
+      mostrarAnel(t0.clientX, t0.clientY);
+    } else {
+      rolarAte(t0.clientY);
+    }
+  }, false);
+
+  function fimToque(e, cancelado) {
+    e.preventDefault();
+    if (!g || modo !== 'trabalho') { g = null; return; }
+    if (e.touches.length > 0 && !cancelado) { return; }
+    cancelarLongo();
+    esconderAnel();
+    var este = g;
+    g = null;
+    if (este.arrasto) {
+      enviar({ t: 'cima', x: este.ult.x, y: este.ult.y });
+    } else if (cancelado) {
+      return;
+    } else if (este.dois) {
+      if (!este.moveu && Date.now() - este.t < 500) {
+        enviar({ t: 'clique', x: este.p.x, y: este.p.y, b: 'dir' });
+      }
+    } else if (este.longo && !este.moveu) {
+      enviar({ t: 'clique', x: este.p.x, y: este.p.y, b: 'dir' });
+    } else if (!este.moveu) {
+      enviar({ t: 'clique', x: este.p.x, y: este.p.y, b: 'esq' });
+    }
+  }
+
+  toque.addEventListener('touchend', function (e) { fimToque(e, false); }, false);
+  toque.addEventListener('touchcancel', function (e) { fimToque(e, true); }, false);
+
+  /* mouse (navegador do computador) */
+  var temMouse = false, mouseBaixo = null, mouseArrastou = false, ultimoToque = 0;
+  var BOTAO_MOUSE = { 0: 'esq', 1: 'meio', 2: 'dir' };
+  toque.addEventListener('touchstart', function () { ultimoToque = Date.now(); }, true);
+
+  toque.addEventListener('mousedown', function (e) {
+    if (Date.now() - ultimoToque < 800) { return; } /* clique simulado depois de um toque */
+    e.preventDefault(); /* mantém o teclado ligado */
+    temMouse = true;
+    focarKb();
+    if (modo !== 'trabalho') { alternarControle(); return; }
+    mouseBaixo = { p: paraTela(e.clientX, e.clientY), b: BOTAO_MOUSE[e.button] || 'esq' };
+    mouseArrastou = false;
+  }, false);
+
+  toque.addEventListener('mousemove', function (e) {
+    if (!temMouse || modo !== 'trabalho') { return; }
+    var p = paraTela(e.clientX, e.clientY);
+    if (mouseBaixo && !mouseArrastou &&
+        Math.abs(p.x - mouseBaixo.p.x) + Math.abs(p.y - mouseBaixo.p.y) > 4) {
+      mouseArrastou = true;
+      enviar({ t: 'baixo', x: mouseBaixo.p.x, y: mouseBaixo.p.y, b: mouseBaixo.b });
+    }
+    enviar({ t: 'mover', x: p.x, y: p.y });
+  }, false);
+
+  toque.addEventListener('mouseup', function (e) {
+    if (modo !== 'trabalho' || !mouseBaixo) { return; }
+    var p = paraTela(e.clientX, e.clientY);
+    if (mouseArrastou) {
+      enviar({ t: 'cima', x: p.x, y: p.y, b: mouseBaixo.b });
+    } else {
+      enviar({ t: 'clique', x: p.x, y: p.y, b: mouseBaixo.b });
+    }
+    mouseBaixo = null;
+    mouseArrastou = false;
+  }, false);
+  toque.addEventListener('wheel', function (e) {
+    var p = paraTela(e.clientX, e.clientY);
+    enviar({ t: 'rolar', x: p.x, y: p.y, n: e.deltaY > 0 ? 1 : -1 });
+  }, false);
+  toque.addEventListener('contextmenu', function (e) { e.preventDefault(); }, false);
+
+  /* impede a página de "quicar" no iOS */
+  document.addEventListener('touchmove', function (e) {
+    if (e.target !== kb) { e.preventDefault(); }
+  }, false);
+
+  /* ---------------------------------------------------------- teclado */
+
+  var SENTINELA = ' ';
+  var mods = { ctrl: false, alt: false };
+  var tecladoAberto = false;
+
+  function prepararKb() {
+    kb.value = SENTINELA;
+    try { kb.setSelectionRange(1, 1); } catch (e) {}
+  }
+
+  function abrirTeclado() {
+    fecharMenu();
+    tecladoAberto = true;
+    $('teclas').className = '';
+    prepararKb();
+    kb.focus();
+  }
+
+  function fecharTeclado() {
+    tecladoAberto = false;
+    $('teclas').className = 'oculto';
+    kb.blur();
+    limparMods();
+  }
+
+  function limparMods() {
+    mods.ctrl = false;
+    mods.alt = false;
+    $('mCtrl').className = 'botao';
+    $('mAlt').className = 'botao';
+  }
+
+  function prefixoMods() {
+    return (mods.ctrl ? 'ctrl+' : '') + (mods.alt ? 'alt+' : '');
+  }
+
+  function enviarTecla(k) {
+    enviar({ t: 'tecla', k: prefixoMods() + k });
+    limparMods();
+  }
+
+  kb.addEventListener('input', function () {
+    var v = kb.value;
+    if (v === '') {
+      enviarTecla('BackSpace');
+    } else if (v.charAt(0) === SENTINELA && v.length > 1) {
+      var texto = v.substring(1);
+      if ((mods.ctrl || mods.alt) && /^[A-Za-z0-9]$/.test(texto)) {
+        enviarTecla(texto.toLowerCase());
+      } else {
+        enviar({ t: 'texto', s: texto });
+      }
+    } else if (v.charAt(0) !== SENTINELA) {
+      enviar({ t: 'texto', s: v });
+    }
+    prepararKb();
+  }, false);
+
+  /* teclado físico (PC ou teclado Bluetooth no iPad) */
+  var ESPECIAIS = {
+    8: 'BackSpace', 9: 'Tab', 13: 'Return', 27: 'Escape',
+    33: 'Prior', 34: 'Next', 35: 'End', 36: 'Home',
+    37: 'Left', 38: 'Up', 39: 'Right', 40: 'Down', 45: 'Insert', 46: 'Delete'
+  };
+  for (var f = 1; f <= 12; f++) { ESPECIAIS[111 + f] = 'F' + f; }
+  var SO_MODIFICADOR = { 16: 1, 17: 1, 18: 1, 20: 1, 91: 1, 92: 1, 93: 1, 229: 1 };
+
+  function focarKb() {
+    if (document.activeElement !== kb) {
+      prepararKb();
+      kb.focus();
+    }
+  }
+
+  document.addEventListener('keydown', function (e) {
+    if (modo !== 'trabalho') { return; }
+    var kc = e.keyCode;
+    if (SO_MODIFICADOR[kc]) { return; }
+    var altGr = e.ctrlKey && e.altKey;            /* AltGr no Windows: é texto */
+    var ctrl = (e.ctrlKey && !altGr) || mods.ctrl;
+    var alt = (e.altKey && !altGr) || mods.alt;
+    var sup = e.metaKey;
+    var nome = ESPECIAIS[kc];
+
+    if (!nome && (ctrl || alt || sup)) {
+      if (e.ctrlKey && !altGr && kc === 86) { focarKb(); return; } /* Ctrl+V: cola o texto copiado no PC */
+      if ((kc >= 65 && kc <= 90) || (kc >= 48 && kc <= 57)) {
+        nome = String.fromCharCode(kc).toLowerCase();
+      }
+    }
+    if (!nome) {
+      /* letras, números e acentos chegam pelo campo de texto */
+      focarKb();
+      return;
+    }
+    e.preventDefault();
+    var pre = (ctrl ? 'ctrl+' : '') + (alt ? 'alt+' : '') + (sup ? 'super+' : '') + (e.shiftKey ? 'shift+' : '');
+    enviar({ t: 'tecla', k: pre + nome });
+    limparMods();
+    prepararKb();
+  }, true);
+
+  kb.addEventListener('blur', function () {
+    if (temMouse) {
+      /* no PC, o teclado fica sempre ligado */
+      setTimeout(function () {
+        var a = document.activeElement;
+        if (modo === 'trabalho' && (!a || a === document.body)) { focarKb(); }
+      }, 50);
+      return;
+    }
+    if (tecladoAberto) {
+      /* o usuário fechou o teclado do iPad */
+      setTimeout(function () {
+        if (document.activeElement !== kb) { fecharTeclado(); }
+      }, 300);
+    }
+  }, false);
+
+  /* botões da barra de teclas: usam touchend para não fechar o teclado do iPad */
+  function ligarBotoes(container, acao) {
+    var bs = container.getElementsByTagName('button');
+    for (var i = 0; i < bs.length; i++) {
+      (function (b) {
+        b.addEventListener('touchstart', function (e) { e.preventDefault(); }, false);
+        b.addEventListener('touchend', function (e) { e.preventDefault(); acao(b); }, false);
+        b.addEventListener('click', function (e) { e.preventDefault(); acao(b); }, false);
+      })(bs[i]);
+    }
+  }
+
+  var ultimaAcao = 0;
+  function umaVez(fn) {
+    /* touchend e click podem disparar juntos; executa só um */
+    return function (b) {
+      var t = Date.now();
+      if (t - ultimaAcao < 350) { return; }
+      ultimaAcao = t;
+      fn(b);
+    };
+  }
+
+  ligarBotoes($('teclas'), umaVez(function (b) {
+    var mod = b.getAttribute('data-mod');
+    var k = b.getAttribute('data-k');
+    if (b.getAttribute('data-acao') === 'fechar') { fecharTeclado(); return; }
+    if (mod) {
+      mods[mod] = !mods[mod];
+      b.className = 'botao' + (mods[mod] ? ' ativo' : '');
+      return;
+    }
+    if (k) { enviarTecla(k); }
+  }));
+
+  /* ---------------------------------------------------------- Modo Cinema */
+
+  var timerControle = null;
+
+  function entrarCinema() {
+    fecharMenu();
+    if (tecladoAberto) { fecharTeclado(); }
+    modo = 'cinema';
+    pararQuadro();
+    pararSom();
+    quadro.style.display = 'none';
+    video.style.display = 'block';
+    mostrarAviso('Preparando o vídeo… leva uns 6 segundos.');
+    tocarCinema();
+  }
+
+  function tocarCinema() {
+    /* precisa acontecer dentro do toque, senão o iOS não deixa tocar */
+    video.src = '/m/' + MT + '/live.m3u8?q=' + pref.qual + '&_=' + Date.now();
+    var p = video.play();
+    if (p && p['catch']) { p['catch'](function () {}); }
+  }
+
+  function sairCinema() {
+    esconderControle();
+    requisitar('POST', '/api/cinema', { acao: 'parar' }, null);
+    video.pause();
+    video.removeAttribute('src');
+    try { video.load(); } catch (e) {}
+    video.style.display = 'none';
+    quadro.style.display = 'block';
+    modo = 'trabalho';
+    esconderAviso();
+    iniciarQuadro();
+    if (pref.som) { tocarSom(); }
+  }
+
+  video.addEventListener('playing', function () { esconderAviso(); }, false);
+  video.addEventListener('waiting', function () {
+    if (modo === 'cinema') { mostrarAviso('Carregando…'); }
+  }, false);
+  video.addEventListener('error', function () {
+    if (modo !== 'cinema') { return; }
+    mostrarAviso('O vídeo parou. Toque em "Reconectar vídeo".');
+    mostrarControle(true);
+  }, false);
+
+  function mostrarControle(fixo) {
+    $('controle').className = '';
+    clearTimeout(timerControle);
+    if (!fixo) { timerControle = setTimeout(esconderControle, 6000); }
+  }
+  function esconderControle() {
+    clearTimeout(timerControle);
+    $('controle').className = 'oculto';
+  }
+  function alternarControle() {
+    if ($('controle').className === 'oculto') { mostrarControle(false); } else { esconderControle(); }
+  }
+
+  ligarBotoes($('controle'), umaVez(function (b) {
+    var k = b.getAttribute('data-k');
+    var vol = b.getAttribute('data-vol');
+    if (b.id === 'cSair') { sairCinema(); return; }
+    if (b.id === 'cReconectar') { mostrarAviso('Reconectando…'); tocarCinema(); mostrarControle(false); return; }
+    if (k) { enviar({ t: 'tecla', k: k }); }
+    if (vol) { requisitar('POST', '/api/volume', { acao: vol }, null); }
+    mostrarControle(false);
+  }));
+
+  /* ---------------------------------------------------------- menu */
+
+  function abrirMenu() { $('menu').className = ''; atualizarMenu(); }
+  function fecharMenu() { $('menu').className = 'oculto'; }
+
+  function atualizarMenu() {
+    $('bSom').textContent = 'Som: ' + (pref.som ? 'ligado' : 'desligado');
+    $('bSom').className = 'botao' + (pref.som ? ' ativo' : '');
+    $('bQual').textContent = 'Qualidade: ' + QUAL[pref.qual].nome;
+  }
+
+  $('alca').addEventListener('click', function () {
+    if ($('menu').className === 'oculto') { abrirMenu(); } else { fecharMenu(); }
+  }, false);
+  $('bTeclado').addEventListener('click', abrirTeclado, false);
+  $('bCinema').addEventListener('click', entrarCinema, false);
+  $('bSom').addEventListener('click', function () {
+    if (pref.som) { desligarSom(); } else { ligarSom(); }
+  }, false);
+  $('bQual').addEventListener('click', function () {
+    var i = ORDEM.indexOf(pref.qual);
+    pref.qual = ORDEM[(i + 1) % ORDEM.length];
+    salvarPref();
+    atualizarMenu();
+    if (modo === 'trabalho') { iniciarQuadro(); }
+  }, false);
+  $('bRecarregar').addEventListener('click', function () { fecharMenu(); iniciarQuadro(); }, false);
+  $('bSair').addEventListener('click', function () {
+    pararQuadro();
+    pararSom();
+    window.location.href = '/sair';
+  }, false);
+
+  /* ---------------------------------------------------------- início */
+
+  window.addEventListener('resize', ajustar, false);
+  window.addEventListener('orientationchange', function () { setTimeout(ajustar, 300); }, false);
+
+  ajustar();
+  atualizarMenu();
+  mostrarAviso('Conectando…');
+  requisitar('GET', '/api/estado', null, function (st, txt) {
+    if (st !== 200) { mostrarAviso('Não consegui falar com o servidor. Toque em ☰ › Recarregar tela.'); return; }
+    var e = JSON.parse(txt);
+    W = e.largura;
+    H = e.altura;
+    MT = e.midia;
+    ajustar();
+    iniciarQuadro();
+  });
+})();
+</script>
+</body>
+</html>

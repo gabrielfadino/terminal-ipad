@@ -1,0 +1,19 @@
+services:
+  terminal:
+    build: .
+    image: terminal-ipad
+    container_name: terminal-ipad
+    restart: unless-stopped
+    env_file: .env
+    # só o próprio computador acessa a porta; o iPad entra pelo Funnel do Tailscale
+    ports:
+      - "127.0.0.1:8090:8090"
+    shm_size: "1gb"
+    mem_limit: 2g
+    volumes:
+      - terminal-home:/home/terminal
+      # o app vem direto desta pasta: atualizar a tela do iPad não exige remontar
+      - ./app:/opt/terminal:ro
+
+volumes:
+  terminal-home:
