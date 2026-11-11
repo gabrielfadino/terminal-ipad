@@ -112,12 +112,14 @@ html,body{margin:0;height:100%;background:#000;color:#e8eaed;font:15px -apple-sy
 
   var W = 1024, H = 768, MT = '';
   var BLANK = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+  /* qualidade da tela: "auto" escolhe sozinho conforme a velocidade da conexão */
   var QUAL = {
-    baixa: { fps: 6, q: 14, nome: 'baixa' },
-    media: { fps: 10, q: 9, nome: 'média' },
-    alta: { fps: 15, q: 5, nome: 'alta' }
+    auto: { nome: 'automática' },
+    baixa: { nome: 'baixa' },
+    media: { nome: 'média' },
+    alta: { nome: 'alta' }
   };
-  var ORDEM = ['baixa', 'media', 'alta'];
+  var ORDEM = ['auto', 'baixa', 'media', 'alta'];
   var PASSO_ROLAR = 28;
 
   function $(id) { return document.getElementById(id); }
@@ -126,7 +128,7 @@ html,body{margin:0;height:100%;background:#000;color:#e8eaed;font:15px -apple-sy
   var tela = $('tela'), quadro = $('quadro'), video = $('video'), toque = $('toque');
   var anel = $('anel'), kb = $('kb'), aviso = $('aviso');
 
-  var pref = { qual: 'media', som: false };
+  var pref = { qual: 'auto', som: false };
   try {
     var salvo = JSON.parse(window.localStorage.getItem('terminal_pref') || '{}');
     if (QUAL[salvo.qual]) { pref.qual = salvo.qual; }
@@ -215,44 +217,73 @@ html,body{margin:0;height:100%;background:#000;color:#e8eaed;font:15px -apple-sy
 
   /* ---------------------------------------------------------- tela (Modo Trabalho) */
 
-  var inicioQuadro = 0, timerReconectar = null;
+  /*
+   * O iPad pede uma imagem da tela por vez e só pede a próxima quando a anterior
+   * chegou. O servidor segura o pedido até a tela mudar. Assim o atraso nunca
+   * se acumula: se a conexão ou o iPad estiverem lentos, vêm menos imagens por
+   * segundo, mas sempre a mais recente.
+   */
+  var URLS = window.URL || window.webkitURL;
+  var geracao = 0, seqTela = 0, urlAtual = null, timerReconectar = null;
+  var perfilAuto = 'media', mediaMs = 0, ultimaTroca = 0;
+
+  function perfilTela() { return pref.qual === 'auto' ? perfilAuto : pref.qual; }
+
+  function medir(ms) {
+    mediaMs = mediaMs ? mediaMs * 0.8 + ms * 0.2 : ms;
+    if (pref.qual !== 'auto' || Date.now() - ultimaTroca < 8000) { return; }
+    if (perfilAuto === 'media' && mediaMs > 650) { perfilAuto = 'baixa'; ultimaTroca = Date.now(); atualizarMenu(); }
+    else if (perfilAuto === 'baixa' && mediaMs < 220) { perfilAuto = 'media'; ultimaTroca = Date.now(); atualizarMenu(); }
+  }
 
   function iniciarQuadro() {
     clearTimeout(timerReconectar);
-    var q = QUAL[pref.qual];
-    quadro.src = '/stream.mjpg?fps=' + q.fps + '&q=' + q.q + '&_=' + Date.now();
-    inicioQuadro = Date.now();
-    /* nem todo navegador avisa quando o primeiro quadro chega */
-    setTimeout(function () {
-      if (modo === 'trabalho' && aviso.textContent === 'Conectando…') { esconderAviso(); }
-    }, 3000);
+    geracao++;
+    seqTela = 0;
+    puxar(geracao);
   }
 
   function pararQuadro() {
     clearTimeout(timerReconectar);
-    quadro.src = BLANK;
+    geracao++;
   }
 
-  quadro.onload = function () {
-    if (modo === 'trabalho' && quadro.src !== BLANK) { esconderAviso(); }
-  };
-  quadro.onerror = function () {
-    if (modo !== 'trabalho' || document.hidden) { return; }
-    mostrarAviso('Reconectando à tela…');
-    clearTimeout(timerReconectar);
-    timerReconectar = setTimeout(function () {
-      requisitar('GET', '/api/estado', null, function (st) {
-        if (st === 200) { iniciarQuadro(); } else { timerReconectar = setTimeout(iniciarQuadro, 3000); }
-      });
-    }, 2000);
-  };
+  function mostrarImagem(blob) {
+    var anterior = urlAtual;
+    urlAtual = URLS.createObjectURL(blob);
+    quadro.onload = function () {
+      if (anterior) { URLS.revokeObjectURL(anterior); }
+      if (modo === 'trabalho') { esconderAviso(); }
+    };
+    quadro.onerror = function () {
+      if (anterior) { URLS.revokeObjectURL(anterior); }
+    };
+    quadro.src = urlAtual;
+  }
 
-  /* reabre a conexão de tempos em tempos para o Safari antigo não acumular memória */
-  setInterval(function () {
-    if (modo === 'trabalho' && !document.hidden && Date.now() - inicioQuadro > 10 * 60 * 1000) {
-      iniciarQuadro();
-    }
-  }, 30000);
+  function puxar(g) {
+    if (g !== geracao || modo !== 'trabalho' || document.hidden) { return; }
+    var x = new XMLHttpRequest();
+    var t0 = Date.now();
+    x.open('GET', '/quadro.jpg?s=' + seqTela + '&p=' + perfilTela() + '&_=' + t0, true);
+    x.responseType = 'blob';
+    x.timeout = 25000;
+    x.onreadystatechange = function () {
+      if (x.readyState !== 4 || g !== geracao) { return; }
+      if (x.status === 401) { irLogin(); return; }
+      if (x.status === 200) {
+        seqTela = parseInt(x.getResponseHeader('X-Seq'), 10) || seqTela;
+        medir(Date.now() - t0);
+        mostrarImagem(x.response);
+        puxar(g); /* já pede a próxima enquanto o iPad desenha esta */
+        return;
+      }
+      if (x.status === 204) { puxar(g); return; } /* tela parada: pede de novo */
+      mostrarAviso('Reconectando à tela…');
+      timerReconectar = setTimeout(function () { puxar(g); }, 2000);
+    };
+    x.send(null);
+  }
 
   /* confere a sessão a cada minuto */
   setInterval(function () { requisitar('GET', '/api/estado', null, null); }, 60000);
@@ -639,7 +670,7 @@ html,body{margin:0;height:100%;background:#000;color:#e8eaed;font:15px -apple-sy
 
   function tocarCinema() {
     /* precisa acontecer dentro do toque, senão o iOS não deixa tocar */
-    video.src = '/m/' + MT + '/live.m3u8?q=' + pref.qual + '&_=' + Date.now();
+    video.src = '/m/' + MT + '/live.m3u8?q=' + perfilTela() + '&_=' + Date.now();
     var p = video.play();
     if (p && p['catch']) { p['catch'](function () {}); }
   }
@@ -699,7 +730,7 @@ html,body{margin:0;height:100%;background:#000;color:#e8eaed;font:15px -apple-sy
   function atualizarMenu() {
     $('bSom').textContent = 'Som: ' + (pref.som ? 'ligado' : 'desligado');
     $('bSom').className = 'botao' + (pref.som ? ' ativo' : '');
-    $('bQual').textContent = 'Qualidade: ' + QUAL[pref.qual].nome;
+    $('bQual').textContent = 'Qualidade: ' + QUAL[pref.qual].nome + (pref.qual === 'auto' ? ' (' + QUAL[perfilAuto].nome + ')' : '');
   }
 
   $('alca').addEventListener('click', function () {

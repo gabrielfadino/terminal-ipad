@@ -415,6 +415,135 @@ async def stream_mjpeg(req):
     return await transmitir(req, resp, cmd, tok, guardar)
 
 
+# Perfis da tela no Modo Trabalho: (escala, qualidade JPEG; menor = melhor)
+PERFIS_TELA = {
+    "baixa": ("683:512", 11),
+    "media": (None, 9),
+    "alta": (None, 5),
+}
+FPS_CAPTURA = 12
+
+
+class CapturaTela:
+    """Uma só captura da tela, compartilhada; guarda sempre a imagem mais recente.
+
+    O app pede /quadro.jpg dizendo qual foi a última imagem que recebeu; se a tela
+    não mudou desde então, o pedido espera (até alguns segundos) por uma mudança.
+    Como o app só pede a próxima depois de receber a anterior, nada se acumula
+    no caminho e o atraso não cresce, mesmo com internet lenta.
+    """
+
+    def __init__(self):
+        self.proc = None
+        self.perfil = None
+        self.tarefa = None
+        self.quadro = b""
+        self.marca = None
+        self.seq = 0
+        self.ultimo_pedido = 0.0
+        self.mudou = asyncio.Condition()
+        self.trava = asyncio.Lock()
+
+    def rodando(self):
+        return self.proc is not None and self.proc.returncode is None
+
+    async def garantir(self, perfil):
+        async with self.trava:
+            if self.rodando() and perfil == self.perfil:
+                return
+            await self._parar()
+            escala, q = PERFIS_TELA[perfil]
+            cmd = [
+                "ffmpeg", "-hide_banner", "-loglevel", "error",
+                "-f", "x11grab", "-draw_mouse", "1", "-framerate", str(FPS_CAPTURA),
+                "-video_size", f"{LARGURA}x{ALTURA}", "-i", DISPLAY,
+            ]
+            if escala:
+                cmd += ["-vf", f"scale={escala}:flags=bilinear"]
+            cmd += ["-c:v", "mjpeg", "-q:v", str(q), "-f", "image2pipe", "-"]
+            self.proc = await asyncio.create_subprocess_exec(
+                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
+            self.perfil = perfil
+            self.tarefa = asyncio.ensure_future(self._ler(self.proc))
+
+    async def _ler(self, proc):
+        buf = bytearray()
+        while True:
+            bloco = await proc.stdout.read(131072)
+            if not bloco:
+                break
+            buf.extend(bloco)
+            fim = buf.find(b"\xff\xd9")
+            ultimo = None
+            while fim >= 0:
+                ultimo = bytes(buf[:fim + 2])
+                del buf[:fim + 2]
+                fim = buf.find(b"\xff\xd9")
+            if ultimo is None:
+                continue
+            inicio = ultimo.find(b"\xff\xd8")
+            if inicio < 0:
+                continue
+            ultimo = ultimo[inicio:]
+            marca = hash(ultimo)
+            if marca == self.marca:
+                continue  # tela igual à anterior: nada a mandar
+            self.marca = marca
+            self.quadro = ultimo
+            self.seq += 1
+            async with self.mudou:
+                self.mudou.notify_all()
+
+    async def esperar_depois_de(self, seq, segundos):
+        if self.seq > seq:
+            return
+        try:
+            async with self.mudou:
+                await asyncio.wait_for(self.mudou.wait_for(lambda: self.seq > seq), segundos)
+        except asyncio.TimeoutError:
+            pass
+
+    async def _parar(self):
+        if self.tarefa:
+            self.tarefa.cancel()
+            self.tarefa = None
+        if self.rodando():
+            matar(self.proc)
+            await self.proc.wait()
+        self.proc = None
+
+    async def vigiar(self):
+        """Desliga a captura quando ninguém está olhando a tela."""
+        while True:
+            await asyncio.sleep(5)
+            if self.rodando() and agora() - self.ultimo_pedido > 20:
+                async with self.trava:
+                    await self._parar()
+
+
+captura = CapturaTela()
+
+
+async def quadro_jpg(req):
+    _, s = sessao_req(req)
+    if not s:
+        return web.Response(status=401, headers=NOCACHE)
+    perfil = req.query.get("p", "media")
+    if perfil not in PERFIS_TELA:
+        perfil = "media"
+    visto = int_ou(req.query.get("s"), 0)
+    captura.ultimo_pedido = agora()
+    await captura.garantir(perfil)
+    await captura.esperar_depois_de(visto, 8 if visto else 6)
+    captura.ultimo_pedido = agora()
+    if not captura.quadro:
+        return web.Response(status=503, headers=NOCACHE)
+    if captura.seq <= visto:
+        return web.Response(status=204, headers=dict(NOCACHE, **{"X-Seq": str(captura.seq)}))
+    return web.Response(body=captura.quadro, headers=dict(
+        NOCACHE, **{"Content-Type": "image/jpeg", "X-Seq": str(captura.seq)}))
+
+
 async def audio_mp3(req):
     tok, s = sessao_midia(req)
     if not s:
@@ -585,6 +714,7 @@ def reiniciar_servidor():
     log("reiniciando para aplicar a atualização")
     salvar_sessoes()
     matar(cinema.proc)
+    matar(captura.proc)
     for s in sessoes.values():
         matar(s.get("mjpeg"))
     os._exit(0)
@@ -635,12 +765,15 @@ async def cabecalhos(req, handler):
 
 async def ao_iniciar(app):
     app["vigia"] = asyncio.ensure_future(cinema.vigiar())
+    app["vigia_tela"] = asyncio.ensure_future(captura.vigiar())
     # depois de 30 s no ar, a versão atual é considerada boa
     asyncio.get_event_loop().call_later(30, atualizador.confirmar_inicio)
 
 
 async def ao_encerrar(app):
     app["vigia"].cancel()
+    app["vigia_tela"].cancel()
+    matar(captura.proc)
     await cinema.parar()
     for tok in list(sessoes):
         encerrar(tok)
@@ -655,6 +788,7 @@ def criar_app():
     app.router.add_get("/icone.png", icone)
     app.router.add_get("/saude", saude)
     app.router.add_get("/stream.mjpg", stream_mjpeg)
+    app.router.add_get("/quadro.jpg", quadro_jpg)
     app.router.add_get("/m/{mt}/audio.mp3", audio_mp3)
     app.router.add_get("/m/{mt}/live.m3u8", hls_playlist)
     app.router.add_get("/m/{mt}/{nome}", hls_segmento)

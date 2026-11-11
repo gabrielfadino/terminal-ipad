@@ -105,7 +105,7 @@ O botão **☰** no canto abre o menu:
 - **Modo Cinema:** vídeo fluido com som. Toque na tela para mostrar o controle remoto
   (play/pausa, avançar, volume, tela cheia). Os comandos aparecem com alguns segundos de atraso.
 - **Som:** liga o som no Modo Trabalho.
-- **Qualidade:** baixa, média ou alta. Se a internet do PC for fraca, use baixa.
+- **Qualidade:** automática (padrão: ajusta sozinha à velocidade da conexão), baixa, média ou alta.
 
 Para assistir uma série: abra o site no Firefox pelo Modo Trabalho, dê play,
 coloque o vídeo em tela cheia e então entre no Modo Cinema.
